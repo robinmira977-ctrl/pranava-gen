@@ -1,0 +1,98 @@
+import os
+import gradio as gr
+from huggingface_hub import InferenceClient
+
+MODEL = "black-forest-labs/FLUX.1-schnell"
+
+
+def generate_image(prompt, style):
+    prompt = (prompt or "").strip()
+
+    if not prompt:
+        raise gr.Error("Please enter a description for your image.")
+    if len(prompt) > 500:
+        raise gr.Error("Please keep your prompt under 500 characters.")
+
+    token = os.getenv("HF_TOKEN")
+    if not token:
+        raise gr.Error(
+            "The app needs a Hugging Face token. Add HF_TOKEN in the Space's Secrets settings."
+        )
+
+    full_prompt = prompt
+    if style and style != "None":
+        full_prompt = f"{prompt}, {style} style"
+
+    try:
+        client = InferenceClient(model=MODEL, token=token)
+        return client.text_to_image(full_prompt)
+    except Exception as error:
+        raise gr.Error(
+            "Image generation failed. Check that your Hugging Face token is valid "
+            "and that your account has Inference Providers access. "
+            f"Details: {str(error)[:250]}"
+        )
+
+
+with gr.Blocks(theme=gr.themes.Soft(), title="AI Image Generator") as demo:
+    gr.Markdown(
+        """
+        # 🎨 AI Image Generator
+        Enter a description and the AI will create an image from your prompt.
+        """
+    )
+
+    with gr.Row():
+        with gr.Column():
+            prompt_input = gr.Textbox(
+                label="Describe your image",
+                placeholder="Example: A little robot reading a book under a tree at sunset",
+                lines=4,
+                max_lines=6,
+            )
+
+            style_input = gr.Dropdown(
+                choices=[
+                    "None",
+                    "digital art",
+                    "watercolor",
+                    "oil painting",
+                    "photorealistic",
+                    "anime",
+                    "3D illustration",
+                ],
+                value="digital art",
+                label="Image style",
+            )
+
+            generate_button = gr.Button("Generate image", variant="primary")
+
+        with gr.Column():
+            output_image = gr.Image(label="Generated image", type="pil")
+
+    generate_button.click(
+        fn=generate_image,
+        inputs=[prompt_input, style_input],
+        outputs=output_image,
+    )
+
+    gr.Examples(
+        examples=[
+            ["A tiny astronaut exploring a glowing forest", "digital art"],
+            ["A cozy cottage beside a lake in the mountains", "watercolor"],
+            ["A friendly orange cat wearing a space helmet", "3D illustration"],
+        ],
+        inputs=[prompt_input, style_input],
+    )
+
+    gr.Markdown(
+        """
+        **How it works:** Your text prompt is sent to a pretrained image-generation
+        model, which returns a newly generated image. This app uses a model; it
+        does not train one from scratch.
+        """
+    )
+
+
+if __name__ == "__main__":
+    demo.launch()
